@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>WebGIS Yol Sorun Bildirim Sistemi</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    #loginBox {
+      width: 300px;
+      margin: 120px auto;
+      text-align: center;
+    }
+
+    #map {
+      height: 100vh;
+      display: none;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 8px;
+      margin-top: 8px;
+    }
+
+    button {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginBox">
+  <h2>Kullanıcı Girişi</h2>
+  <input id="username" placeholder="Kullanıcı adı">
+  <input id="password" type="password" placeholder="Şifre">
+  <button onclick="login()">Giriş Yap</button>
+</div>
+
+<!-- ================= MAP ================= -->
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+const API = "http://localhost:3000";
+let map;
+
+/* ================= LOGIN ================= */
+function login() {
+  fetch(API + "/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: username.value,
+      password: password.value
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+
+    // 🔐 Token + role sakla
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("role", data.role);
+
+    // UI geçiş
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("map").style.display = "block";
+
+    initMap();
+  });
+}
+
+/* ================= MAP INIT ================= */
+function initMap() {
+  // 📍 Ankara Keçiören
+  map = L.map("map").setView([39.998, 32.865], 14);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
+    .addTo(map);
+
+  loadReports();
+
+  // Vatandaş haritaya tıklayıp bildirim yapabilir
+  map.on("click", onMapClick);
+}
+
+/* ================= LOAD REPORTS ================= */
+function loadReports() {
+  fetch(API + "/reports", {
+    headers: {
+      Authorization: "Bearer " + localStorage.getItem("token")
+    }
+  })
+  .then(res => res.json())
+  .then(data => {
+    const role = localStorage.getItem("role");
+
+    data.forEach(r => {
+      const g = JSON.parse(r.geom);
+
+      let popupContent = `
+        <b>Tür:</b> ${r.type}<br>
+        <b>Durum:</b> ${r.status}<br>
+        <b>Ekip:</b> ${r.assigned_team || "Atanmadı"}<br>
+        <b>Açıklama:</b> ${r.description || "-"}<br>
+      `;
+
+      // 👷 Belediye çalışanı
+      if (role === "worker") {
+        popupContent += `
+          <hr>
+          <button onclick="updateStatus(${r.id}, 'tamir edilecek')">
+            Tamir Edilecek
+          </button>
+          <button onclick="updateStatus(${r.id}, 'tamir edildi')">
+            Tamir Edildi
+          </button>
+        `;
+      }
+
+      // 🧑‍💼 Müdür
+      if (role === "manager") {
+        popupContent += `
+          <hr>
+          <button onclick="assignTeam(${r.id})">
+            Ekip Ata
+          </button>
+        `;
+      }
+
+      L.marker([g.coordinates[1], g.coordinates[0]])
+        .bindPopup(popupContent)
+        .addTo(map);
+    });
+  });
+}
+
+/* ================= ADD NEW REPORT (USER) ================= */
+function onMapClick(e) {
+  const role = localStorage.getItem("role");
+  if (role !== "user") return;
+
+  const type = prompt("Sorun türü (pothole / sidewalk)");
+  if (!type) return;
+
+  const description = prompt("Açıklama (isteğe bağlı)");
+
+  // 📍 Anında marker
+  const marker = L.marker(e.latlng)
+    .bindPopup("<b>Kaydediliyor...</b>")
+    .addTo(map);
+
+  fetch(API + "/reports", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + localStorage.getItem("token")
+    },
+    body: JSON.stringify({
+      type,
+      description,
+      lat: e.latlng.lat,
+      lng: e.latlng.lng
+    })
+  }).then(() => {
+    marker.setPopupContent(`
+      <b>${type}</b><br>
+      Durum: pending
+    `);
+  });
+}
+
+/* ================= UPDATE STATUS (WORKER) ================= */
+function updateStatus(id, status) {
+  fetch(API + `/reports/${id}/status`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + localStorage.getItem("token")
+    },
+    body: JSON.stringify({ status })
+  }).then(() => location.reload());
+}
+
+/* ================= ASSIGN TEAM (MANAGER) ================= */
+function assignTeam(id) {
+  const team = prompt("Ekip adı giriniz");
+  if (!team) return;
+
+  fetch(API + `/reports/${id}/assign`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + localStorage.getItem("token")
+    },
+    body: JSON.stringify({ team })
+  }).then(() => location.reload());
+}
+</script>
+
+</body>
+</html>
