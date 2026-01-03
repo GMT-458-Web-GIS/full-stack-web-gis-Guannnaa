@@ -7,14 +7,11 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-    }
+    body { margin: 0; font-family: Arial; }
 
     #loginBox {
-      width: 300px;
-      margin: 120px auto;
+      width: 320px;
+      margin: 100px auto;
       text-align: center;
     }
 
@@ -29,8 +26,10 @@
       margin-top: 8px;
     }
 
-    button {
+    .link {
+      color: blue;
       cursor: pointer;
+      font-size: 14px;
     }
   </style>
 </head>
@@ -38,10 +37,14 @@
 
 <!-- ================= LOGIN ================= -->
 <div id="loginBox">
-  <h2>Kullanıcı Girişi</h2>
+  <h2 id="formTitle">Giriş Yap</h2>
+
   <input id="username" placeholder="Kullanıcı adı">
   <input id="password" type="password" placeholder="Şifre">
+
   <button onclick="login()">Giriş Yap</button>
+
+  <p class="link" onclick="showRegister()">Vatandaş olarak kayıt ol</p>
 </div>
 
 <!-- ================= MAP ================= -->
@@ -52,9 +55,23 @@
 <script>
 const API = "http://localhost:3000";
 let map;
+let isRegister = false;
 
-/* ================= LOGIN ================= */
+/* ================= FORM TOGGLE ================= */
+function showRegister() {
+  document.getElementById("formTitle").innerText = "Vatandaş Kaydı";
+  document.querySelector("button").innerText = "Kayıt Ol";
+  document.querySelector(".link").style.display = "none";
+  isRegister = true;
+}
+
+/* ================= LOGIN / REGISTER ================= */
 function login() {
+  if (isRegister) {
+    register();
+    return;
+  }
+
   fetch(API + "/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -70,11 +87,9 @@ function login() {
       return;
     }
 
-    // 🔐 Token + role sakla
     localStorage.setItem("token", data.token);
     localStorage.setItem("role", data.role);
 
-    // UI geçiş
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("map").style.display = "block";
 
@@ -82,17 +97,37 @@ function login() {
   });
 }
 
-/* ================= MAP INIT ================= */
+/* ================= REGISTER (ONLY USER) ================= */
+function register() {
+  fetch(API + "/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: username.value,
+      password: password.value,
+      role: "user"
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+
+    alert("Kayıt başarılı, giriş yapabilirsiniz");
+    location.reload();
+  });
+}
+
+/* ================= MAP ================= */
 function initMap() {
-  // 📍 Ankara Keçiören
   map = L.map("map").setView([39.998, 32.865], 14);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
     .addTo(map);
 
   loadReports();
-
-  // Vatandaş haritaya tıklayıp bildirim yapabilir
   map.on("click", onMapClick);
 }
 
@@ -110,57 +145,36 @@ function loadReports() {
     data.forEach(r => {
       const g = JSON.parse(r.geom);
 
-      let popupContent = `
+      let popup = `
         <b>Tür:</b> ${r.type}<br>
         <b>Durum:</b> ${r.status}<br>
         <b>Ekip:</b> ${r.assigned_team || "Atanmadı"}<br>
-        <b>Açıklama:</b> ${r.description || "-"}<br>
       `;
 
-      // 👷 Belediye çalışanı
       if (role === "worker") {
-        popupContent += `
-          <hr>
-          <button onclick="updateStatus(${r.id}, 'tamir edilecek')">
-            Tamir Edilecek
-          </button>
-          <button onclick="updateStatus(${r.id}, 'tamir edildi')">
-            Tamir Edildi
-          </button>
+        popup += `
+          <button onclick="updateStatus(${r.id}, 'tamir edilecek')">Tamir Edilecek</button>
+          <button onclick="updateStatus(${r.id}, 'tamir edildi')">Tamir Edildi</button>
         `;
       }
 
-      // 🧑‍💼 Müdür
       if (role === "manager") {
-        popupContent += `
-          <hr>
-          <button onclick="assignTeam(${r.id})">
-            Ekip Ata
-          </button>
-        `;
+        popup += `<button onclick="assignTeam(${r.id})">Ekip Ata</button>`;
       }
 
       L.marker([g.coordinates[1], g.coordinates[0]])
-        .bindPopup(popupContent)
+        .bindPopup(popup)
         .addTo(map);
     });
   });
 }
 
-/* ================= ADD NEW REPORT (USER) ================= */
+/* ================= ADD REPORT (USER) ================= */
 function onMapClick(e) {
-  const role = localStorage.getItem("role");
-  if (role !== "user") return;
+  if (localStorage.getItem("role") !== "user") return;
 
   const type = prompt("Sorun türü (pothole / sidewalk)");
   if (!type) return;
-
-  const description = prompt("Açıklama (isteğe bağlı)");
-
-  // 📍 Anında marker
-  const marker = L.marker(e.latlng)
-    .bindPopup("<b>Kaydediliyor...</b>")
-    .addTo(map);
 
   fetch(API + "/reports", {
     method: "POST",
@@ -170,19 +184,13 @@ function onMapClick(e) {
     },
     body: JSON.stringify({
       type,
-      description,
       lat: e.latlng.lat,
       lng: e.latlng.lng
     })
-  }).then(() => {
-    marker.setPopupContent(`
-      <b>${type}</b><br>
-      Durum: pending
-    `);
-  });
+  }).then(() => location.reload());
 }
 
-/* ================= UPDATE STATUS (WORKER) ================= */
+/* ================= WORKER ================= */
 function updateStatus(id, status) {
   fetch(API + `/reports/${id}/status`, {
     method: "PUT",
@@ -194,7 +202,7 @@ function updateStatus(id, status) {
   }).then(() => location.reload());
 }
 
-/* ================= ASSIGN TEAM (MANAGER) ================= */
+/* ================= MANAGER ================= */
 function assignTeam(id) {
   const team = prompt("Ekip adı giriniz");
   if (!team) return;
