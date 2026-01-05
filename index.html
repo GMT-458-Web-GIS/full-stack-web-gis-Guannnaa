@@ -2,76 +2,101 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <title>WebGIS Yol Sorun Bildirim Sistemi</title>
+  <title>WebGIS Belediye Sistemi</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
 
   <style>
-    body { margin: 0; font-family: Arial; }
+    body { margin:0; font-family: Arial; }
+    #map { height: 100vh; }
 
-    #loginBox {
-      width: 320px;
-      margin: 100px auto;
-      text-align: center;
+    #loginBox, #panel, #teamPanel {
+      position: absolute;
+      background: white;
+      padding: 10px;
+      z-index: 1000;
+      border-radius: 6px;
     }
 
-    #map {
-      height: 100vh;
+    #loginBox {
+      top: 20px;
+      left: 20px;
+      width: 220px;
+    }
+
+    #panel {
+      top: 20px;
+      right: 20px;
+      width: 250px;
       display: none;
     }
 
-    input, button {
-      width: 100%;
-      padding: 8px;
-      margin-top: 8px;
+    #teamPanel {
+      bottom: 20px;
+      right: 20px;
+      width: 220px;
+      display: none;
     }
 
-    .link {
-      color: blue;
-      cursor: pointer;
-      font-size: 14px;
-    }
+    button { width: 100%; margin-top: 5px; }
+    select, input { width: 100%; margin-top: 5px; }
   </style>
 </head>
+
 <body>
 
-<!-- ================= LOGIN ================= -->
 <div id="loginBox">
-  <h2 id="formTitle">Giriş Yap</h2>
-
+  <h3>Giriş</h3>
   <input id="username" placeholder="Kullanıcı adı">
   <input id="password" type="password" placeholder="Şifre">
-
   <button onclick="login()">Giriş Yap</button>
 
-  <p class="link" onclick="showRegister()">Vatandaş olarak kayıt ol</p>
+  <hr>
+  <h4>Kullanıcı Kayıt</h4>
+  <input id="r_user" placeholder="Kullanıcı adı">
+  <input id="r_pass" type="password" placeholder="Şifre">
+  <button onclick="register()">Kayıt Ol</button>
 </div>
 
-<!-- ================= MAP ================= -->
+<div id="panel">
+  <h3 id="roleTitle"></h3>
+  <div id="managerControls"></div>
+  <div id="workerControls"></div>
+</div>
+
+<div id="teamPanel">
+  <h4>Ekip Durumları</h4>
+  <ul id="teamList"></ul>
+</div>
+
 <div id="map"></div>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
 const API = "http://localhost:3000";
 let map;
-let isRegister = false;
+let role = null;
 
-/* ================= FORM TOGGLE ================= */
-function showRegister() {
-  document.getElementById("formTitle").innerText = "Vatandaş Kaydı";
-  document.querySelector("button").innerText = "Kayıt Ol";
-  document.querySelector(".link").style.display = "none";
-  isRegister = true;
+/* ================= MAP ================= */
+
+function initMap() {
+  map = L.map("map").setView([39.983, 32.866], 13); // Keçiören
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap"
+  }).addTo(map);
+
+  map.on("click", onMapClick);
+  loadReports();
 }
 
-/* ================= LOGIN / REGISTER ================= */
-function login() {
-  if (isRegister) {
-    register();
-    return;
-  }
+/* ================= AUTH ================= */
 
+function login() {
   fetch(API + "/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -80,140 +105,153 @@ function login() {
       password: password.value
     })
   })
-  .then(res => res.json())
-  .then(data => {
-    if (data.error) {
-      alert(data.error);
-      return;
-    }
-
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("role", data.role);
-
-    document.getElementById("loginBox").style.display = "none";
-    document.getElementById("map").style.display = "block";
-
-    initMap();
+  .then(r => r.json())
+  .then(d => {
+    if (d.token) {
+      localStorage.token = d.token;
+      localStorage.role = d.role;
+      role = d.role;
+      loginBox.style.display = "none";
+      panel.style.display = "block";
+      roleTitle.innerText = "Rol: " + role;
+      initRoleUI();
+      initMap();
+    } else alert(d.error);
   });
 }
 
-/* ================= REGISTER (ONLY USER) ================= */
 function register() {
   fetch(API + "/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      username: username.value,
-      password: password.value,
+      username: r_user.value,
+      password: r_pass.value,
       role: "user"
     })
   })
-  .then(res => res.json())
-  .then(data => {
-    if (data.error) {
-      alert(data.error);
-      return;
-    }
-
-    alert("Kayıt başarılı, giriş yapabilirsiniz");
-    location.reload();
-  });
+  .then(r => r.json())
+  .then(d => alert(d.message || d.error));
 }
 
-/* ================= MAP ================= */
-function initMap() {
-  map = L.map("map").setView([39.998, 32.865], 14);
+/* ================= ROLE UI ================= */
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
-    .addTo(map);
+function initRoleUI() {
+  if (role === "manager") {
+    teamPanel.style.display = "block";
+    loadTeams();
+  }
 
-  loadReports();
-  map.on("click", onMapClick);
+  if (role === "worker") {
+    workerControls.innerHTML = `
+      <select id="statusSelect">
+        <option value="tamir edilecek">Tamir Edilecek</option>
+        <option value="tamir edildi">Tamir Edildi</option>
+      </select>
+    `;
+  }
 }
 
-/* ================= LOAD REPORTS ================= */
-function loadReports() {
-  fetch(API + "/reports", {
-    headers: {
-      Authorization: "Bearer " + localStorage.getItem("token")
-    }
-  })
-  .then(res => res.json())
-  .then(data => {
-    const role = localStorage.getItem("role");
+/* ================= MAP CLICK ================= */
 
-    data.forEach(r => {
-      const g = JSON.parse(r.geom);
-
-      let popup = `
-        <b>Tür:</b> ${r.type}<br>
-        <b>Durum:</b> ${r.status}<br>
-        <b>Ekip:</b> ${r.assigned_team || "Atanmadı"}<br>
-      `;
-
-      if (role === "worker") {
-        popup += `
-          <button onclick="updateStatus(${r.id}, 'tamir edilecek')">Tamir Edilecek</button>
-          <button onclick="updateStatus(${r.id}, 'tamir edildi')">Tamir Edildi</button>
-        `;
-      }
-
-      if (role === "manager") {
-        popup += `<button onclick="assignTeam(${r.id})">Ekip Ata</button>`;
-      }
-
-      L.marker([g.coordinates[1], g.coordinates[0]])
-        .bindPopup(popup)
-        .addTo(map);
-    });
-  });
-}
-
-/* ================= ADD REPORT (USER) ================= */
 function onMapClick(e) {
-  if (localStorage.getItem("role") !== "user") return;
+  if (role !== "user") return;
 
-  const type = prompt("Sorun türü (pothole / sidewalk)");
-  if (!type) return;
+  const desc = prompt("Sorun açıklaması:");
+  if (!desc) return;
 
   fetch(API + "/reports", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: "Bearer " + localStorage.getItem("token")
+      Authorization: "Bearer " + localStorage.token
     },
     body: JSON.stringify({
-      type,
+      type: "yol",
+      description: desc,
       lat: e.latlng.lat,
       lng: e.latlng.lng
     })
-  }).then(() => location.reload());
+  }).then(() => loadReports());
+}
+
+/* ================= LOAD REPORTS ================= */
+
+function loadReports() {
+  fetch(API + "/reports", {
+    headers: { Authorization: "Bearer " + localStorage.token }
+  })
+  .then(r => r.json())
+  .then(data => {
+    data.forEach(r => {
+      const g = JSON.parse(r.geom);
+      const m = L.marker([g.coordinates[1], g.coordinates[0]]).addTo(map);
+
+      let html = `<b>${r.description}</b><br>Durum: ${r.status}`;
+
+      if (role === "manager") {
+        html += `
+          <br>
+          <select onchange="assignTeam(${r.id}, this.value)">
+            <option>-- ekip seç --</option>
+            <option>Ekip 1</option>
+            <option>Ekip 2</option>
+            <option>Ekip 3</option>
+          </select>
+        `;
+      }
+
+      if (role === "worker") {
+        html += `
+          <br>
+          <button onclick="updateStatus(${r.id}, 'tamir edildi')">
+            Tamir Edildi
+          </button>
+        `;
+      }
+
+      m.bindPopup(html);
+    });
+  });
+}
+
+/* ================= MANAGER ================= */
+
+function assignTeam(id, team) {
+  fetch(API + `/reports/${id}/assign`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + localStorage.token
+    },
+    body: JSON.stringify({ team })
+  }).then(() => loadTeams());
+}
+
+function loadTeams() {
+  fetch(API + "/teams", {
+    headers: { Authorization: "Bearer " + localStorage.token }
+  })
+  .then(r => r.json())
+  .then(data => {
+    teamList.innerHTML = "";
+    data.forEach(t => {
+      const icon = t.status === "available" ? "🟢" : "🔴";
+      teamList.innerHTML += `<li>${icon} ${t.name}</li>`;
+    });
+  });
 }
 
 /* ================= WORKER ================= */
+
 function updateStatus(id, status) {
   fetch(API + `/reports/${id}/status`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
-      Authorization: "Bearer " + localStorage.getItem("token")
+      Authorization: "Bearer " + localStorage.token
     },
     body: JSON.stringify({ status })
-  }).then(() => location.reload());
-}
-
-/* ================= MANAGER ================= */
-function assignTeam(id) {
-  const team = prompt("Ekip adı giriniz");
-  if (!team) return;
-
-  fetch(API + `/reports/${id}/assign`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + localStorage.getItem("token")
-    },
-    body: JSON.stringify({ team })
   }).then(() => location.reload());
 }
 </script>
