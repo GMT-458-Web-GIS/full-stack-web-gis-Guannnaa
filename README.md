@@ -50,8 +50,13 @@ The spatial database is implemented using **PostgreSQL + PostGIS**.
 ### Tables:
 
 * **users:** Stores user credentials and roles
+* <img width="1246" height="953" alt="image" src="https://github.com/user-attachments/assets/9cb4f8ef-5161-45af-b62e-42971ef63c39" />
+
 * **reports:** Stores spatial incident reports (POINT geometry)
+* <img width="1251" height="944" alt="image" src="https://github.com/user-attachments/assets/80cb3cd8-ed9e-40d8-bc01-96167123d915" />
+
 * **teams:** Stores team information and availability status
+<img width="1254" height="940" alt="image" src="https://github.com/user-attachments/assets/49f5413c-9a15-4e18-a7c5-a1c2f582a0f3" />
 
 Spatial data is stored using EPSG:4326 coordinate reference system.
 
