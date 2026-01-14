@@ -1,0 +1,31 @@
+config:
+  target: http://localhost:3000
+  phases:
+    - duration: 60
+      arrivalRate: 10
+
+scenarios:
+  - flow:
+      - post:
+          url: /login
+          json:
+            username: admin
+            password: 1234
+          capture:
+            - json: $.token
+              as: token
+
+      - get:
+          url: /reports
+          headers:
+            Authorization: "Bearer {{ token }}"
+
+      - post:
+          url: /reports
+          headers:
+            Authorization: "Bearer {{ token }}"
+          json:
+            type: yol
+            description: Artillery test report
+            lat: 39.983
+            lng: 32.866

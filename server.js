@@ -9,11 +9,79 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const swaggerJsDoc = require("swagger-jsdoc");
+const swaggerUi = require("swagger-ui-express");
+
+const swaggerOptions = {
+  swaggerDefinition: {
+    openapi: "3.0.0",
+    info: {
+      title: "Road Report API",
+      version: "1.0.0",
+      description: "API for managing road reports and teams",
+    },
+    servers: [
+      {
+        url: "http://localhost:3000",
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
+    },
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
+  },
+  apis: ["./server.js"],
+};
+
+const swaggerDocs = swaggerJsDoc(swaggerOptions);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+
 const JWT_SECRET = "SECRET_KEY";
 
 /* ===================== REGISTER ===================== */
+
+/**
+ * @swagger
+ * /register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - password
+ *               - role
+ *             properties:
+ *               username:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [user, manager, worker]
+ *     responses:
+ *       200:
+ *         description: User created
+ *       400:
+ *         description: Missing fields or User already exists
+ */
 app.post("/register", async (req, res) => {
-const { username, password, role } = req.body;
+  const { username, password, role } = req.body;
   if (!username || !password || !role) {
     return res.status(400).json({ error: "Missing fields" });
   }
@@ -32,6 +100,42 @@ const { username, password, role } = req.body;
 });
 
 /* ===================== LOGIN ===================== */
+
+/**
+ * @swagger
+ * /login:
+ *   post:
+ *     summary: Login user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                 role:
+ *                   type: string
+ *       401:
+ *         description: User not found or Wrong password
+ */
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -62,6 +166,38 @@ app.post("/login", async (req, res) => {
 /* ===================== REPORTS ===================== */
 
 // GET ALL REPORTS
+
+/**
+ * @swagger
+ * /reports:
+ *   get:
+ *     summary: Get all reports
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of reports
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   type:
+ *                     type: string
+ *                   description:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *                   assigned_team:
+ *                     type: string
+ *                   geom:
+ *                     type: string
+ */
 app.get("/reports", auth, async (req, res) => {
   const result = await pool.query(
     "SELECT id,type,description,status,assigned_team,ST_AsGeoJSON(geom) AS geom FROM reports"
@@ -70,6 +206,41 @@ app.get("/reports", auth, async (req, res) => {
 });
 
 // ADD REPORT (USER)
+// ADD REPORT (USER)
+/**
+ * @swagger
+ * /reports:
+ *   post:
+ *     summary: Create a new report (User only)
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - type
+ *               - description
+ *               - lat
+ *               - lng
+ *             properties:
+ *               type:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               lat:
+ *                 type: number
+ *               lng:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Report added
+ *       403:
+ *         description: Forbidden
+ */
 app.post("/reports", auth, async (req, res) => {
   if (req.user.role !== "user") {
     return res.status(403).json({ error: "Only users can add reports" });
@@ -89,6 +260,21 @@ app.post("/reports", auth, async (req, res) => {
 /* ===================== TEAMS ===================== */
 
 // GET TEAMS (MANAGER)
+// GET TEAMS (MANAGER)
+/**
+ * @swagger
+ * /teams:
+ *   get:
+ *     summary: Get all teams (Manager only)
+ *     tags: [Teams]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of teams
+ *       403:
+ *         description: Forbidden
+ */
 app.get("/teams", auth, async (req, res) => {
   if (req.user.role !== "manager") {
     return res.status(403).json({ error: "Forbidden" });
@@ -99,6 +285,38 @@ app.get("/teams", auth, async (req, res) => {
 });
 
 // ASSIGN TEAM (MANAGER)
+// ASSIGN TEAM (MANAGER)
+/**
+ * @swagger
+ * /reports/{id}/assign:
+ *   put:
+ *     summary: Assign a team to a report (Manager only)
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - team
+ *             properties:
+ *               team:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Team assigned
+ *       403:
+ *         description: Forbidden
+ */
 app.put("/reports/:id/assign", auth, async (req, res) => {
   if (req.user.role !== "manager") {
     return res.status(403).json({ error: "Only manager can assign teams" });
@@ -123,6 +341,38 @@ app.put("/reports/:id/assign", auth, async (req, res) => {
 /* ===================== WORKER ===================== */
 
 // UPDATE STATUS (WORKER)
+// UPDATE STATUS (WORKER)
+/**
+ * @swagger
+ * /reports/{id}/status:
+ *   put:
+ *     summary: Update report status (Worker only)
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Status updated
+ *       403:
+ *         description: Forbidden
+ */
 app.put("/reports/:id/status", auth, async (req, res) => {
   if (req.user.role !== "worker") {
     return res.status(403).json({ error: "Only workers can update status" });
@@ -152,6 +402,27 @@ app.put("/reports/:id/status", auth, async (req, res) => {
 });
 
 /* ===================== DELETE (MANAGER) ===================== */
+/* ===================== DELETE (MANAGER) ===================== */
+/**
+ * @swagger
+ * /reports/{id}:
+ *   delete:
+ *     summary: Delete a report (Manager only)
+ *     tags: [Reports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Deleted
+ *       403:
+ *         description: Forbidden
+ */
 app.delete("/reports/:id", auth, async (req, res) => {
   if (req.user.role !== "manager") {
     return res.status(403).json({ error: "Forbidden" });
@@ -163,5 +434,6 @@ app.delete("/reports/:id", auth, async (req, res) => {
 
 /* ===================== START ===================== */
 app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");});
+  console.log("Server running on http://localhost:3000");
+});
 
