@@ -75,7 +75,7 @@ All CRUD operations are implemented via RESTful API endpoints.
 
 ---
 
-## 6. REST API Development
+## 6. REST API Development and API Testing
 
 A RESTful API was developed to manage both spatial and non-spatial data.
 
@@ -89,6 +89,24 @@ A RESTful API was developed to manage both spatial and non-spatial data.
 * `PUT /reports/{id}/status` – Update status (Worker)
 * `DELETE /reports/{id}` – Delete report (Manager)
 * `GET /teams` – Retrieve teams (Manager)
+  Authentication Test (Postman)
+
+The /login endpoint was tested using Postman.
+A valid username and password return a JWT token and the user role.
+This token is used to access all protected API endpoints.
+
+<img width="1041" height="957" alt="Ekran görüntüsü 2026-01-15 173500" src="https://github.com/user-attachments/assets/18f83154-37b9-48aa-b4b0-e08e0717936a" />
+
+
+Spatial API Endpoints Test
+
+Spatial endpoints (GET /reports, POST /reports, PUT /reports/{id}, DELETE /reports/{id}) were tested using Postman.
+Spatial data is successfully stored and retrieved from PostGIS in GeoJSON format, and CRUD operations work as expected with role-based access control.
+
+<img width="1050" height="979" alt="Ekran görüntüsü 2026-01-15 173659" src="https://github.com/user-attachments/assets/e1e12ab0-4962-4eb8-86f6-d001cc9525be" />
+
+<img width="1062" height="962" alt="Ekran görüntüsü 2026-01-15 174049" src="https://github.com/user-attachments/assets/fe0b6add-c856-4835-ac66-52eae0d224a7" />
+
 
 ---
 
